@@ -25,15 +25,10 @@ pipeline {
     steps {
         sh '''
             set -eu
-
             python3 -m venv .venv
-
             .venv/bin/python -m ensurepip --upgrade
-
             .venv/bin/python -m pip install --upgrade pip
-
             .venv/bin/python -m pip install -r app/requirements.txt pytest
-
             .venv/bin/python -m pytest -v
         '''
     }
