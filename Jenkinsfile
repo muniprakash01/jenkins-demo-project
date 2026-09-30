@@ -1,3 +1,4 @@
+```groovy
 pipeline {
     agent any
 
@@ -7,10 +8,11 @@ pipeline {
     }
 
     environment {
-        IMAGE_NAME = "flask-cicd"
-        CONTAINER_NAME = "flask-cicd-app"
-        APP_PORT = "5000"
-        APP_ENV = "production"
+        APP_NAME = 'jenkins-demo-project'
+        IMAGE_NAME = 'jenkins-demo-project'
+        CONTAINER_PORT = '5000'
+        HOST_PORT = '5000'
+        COMPOSE_FILE = 'docker-compose.yml'
     }
 
     stages {
@@ -18,34 +20,35 @@ pipeline {
         stage('Checkout') {
             steps {
                 checkout scm
+                echo 'Source code checked out successfully.'
             }
         }
 
         stage('Install Dependencies and Test') {
-    steps {
-        sh '''
-            set -eu
-            python3 -m venv .venv
-            .venv/bin/python -m ensurepip --upgrade
-            .venv/bin/python -m pip install --upgrade pip
-            .venv/bin/python -m pip install -r app/requirements.txt pytest
-            .venv/bin/python -m pytest -v
-        '''
-    }
-}
-
-        stage('Build Docker Image') {
             steps {
-                script {
-                    env.IMAGE_TAG = "${BUILD_NUMBER}"
-                }
-
                 sh '''
                     set -eu
 
-                    docker build \
-                        --pull \
-                        -t ${IMAGE_NAME}:${IMAGE_TAG} .
+                    sudo apt-get update
+                    sudo apt-get install -y python3-venv python3-pip
+
+                    rm -rf .venv
+                    python3 -m venv .venv
+
+                    .venv/bin/python -m pip install --upgrade pip
+                    .venv/bin/python -m pip install -r app/requirements.txt pytest
+
+                    .venv/bin/python -m pytest -v
+                '''
+            }
+        }
+
+        stage('Build Docker Image') {
+            steps {
+                sh '''
+                    set -eu
+                    docker build -t ${IMAGE_NAME}:${BUILD_NUMBER} .
+                    docker tag ${IMAGE_NAME}:${BUILD_NUMBER} ${IMAGE_NAME}:latest
                 '''
             }
         }
@@ -54,42 +57,20 @@ pipeline {
             steps {
                 sh '''
                     set -eu
-
-                    trivy image \
-                        --exit-code 1 \
+                    trivy image --exit-code 1 \
                         --severity HIGH,CRITICAL \
-                        --ignore-unfixed \
-                        ${IMAGE_NAME}:${IMAGE_TAG}
+                        ${IMAGE_NAME}:${BUILD_NUMBER}
                 '''
             }
         }
 
         stage('Deploy') {
             steps {
-                script {
-                    env.PREVIOUS_TAG = sh(
-                        script: '''
-                            docker inspect \
-                                --format='{{.Config.Image}}' \
-                                ${CONTAINER_NAME} 2>/dev/null \
-                            | sed "s|^${IMAGE_NAME}:||" || true
-                        ''',
-                        returnStdout: true
-                    ).trim()
-
-                    if (env.PREVIOUS_TAG == env.IMAGE_TAG) {
-                        env.PREVIOUS_TAG = ""
-                    }
-                }
-
                 sh '''
                     set -eu
 
-                    export IMAGE_NAME=${IMAGE_NAME}
-                    export IMAGE_TAG=${IMAGE_TAG}
-                    export APP_ENV=${APP_ENV}
-
-                    docker compose up -d --no-build
+                    docker compose -f ${COMPOSE_FILE} \
+                        up -d --build
                 '''
             }
         }
@@ -100,20 +81,16 @@ pipeline {
                     set -eu
 
                     for i in $(seq 1 30); do
-                        STATUS=$(docker inspect \
-                            --format='{{.State.Health.Status}}' \
-                            ${CONTAINER_NAME} 2>/dev/null || true)
-
-                        if [ "$STATUS" = "healthy" ]; then
-                            echo "Application is healthy"
+                        if curl -fsS http://localhost:${HOST_PORT}/; then
+                            echo "Application is healthy."
                             exit 0
                         fi
 
-                        echo "Waiting for application: $STATUS"
-                        sleep 2
+                        echo "Waiting for application..."
+                        sleep 5
                     done
 
-                    echo "Health check failed"
+                    echo "Health check failed."
                     exit 1
                 '''
             }
@@ -122,51 +99,15 @@ pipeline {
 
     post {
         success {
-            echo 'Deployment completed successfully.'
-
-            sh '''
-                set -eu
-
-                docker image prune -f
-            '''
+            echo 'CI/CD pipeline completed successfully.'
         }
 
         failure {
-            echo 'Pipeline failed. Checking whether rollback is possible.'
+            echo 'Pipeline failed. Check the console output.'
 
-            script {
-                if (env.PREVIOUS_TAG?.trim()) {
-                    sh '''
-                        set -eu
-
-                        echo "Rolling back to ${PREVIOUS_TAG}"
-
-                        export IMAGE_NAME=${IMAGE_NAME}
-                        export IMAGE_TAG=${PREVIOUS_TAG}
-                        export APP_ENV=${APP_ENV}
-
-                        docker compose up -d --no-build
-
-                        for i in $(seq 1 30); do
-                            STATUS=$(docker inspect \
-                                --format='{{.State.Health.Status}}' \
-                                ${CONTAINER_NAME} 2>/dev/null || true)
-
-                            if [ "$STATUS" = "healthy" ]; then
-                                echo "Rollback successful"
-                                exit 0
-                            fi
-
-                            sleep 2
-                        done
-
-                        echo "Rollback health check failed"
-                        exit 1
-                    '''
-                } else {
-                    echo 'No previous deployment found. Manual recovery may be required.'
-                }
-            }
+            sh '''
+                docker compose -f ${COMPOSE_FILE} ps || true
+            '''
         }
 
         always {
@@ -174,3 +115,4 @@ pipeline {
         }
     }
 }
+```
