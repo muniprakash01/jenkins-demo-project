@@ -22,20 +22,22 @@ pipeline {
         }
 
         stage('Install Dependencies and Test') {
-            steps {
-                sh '''
-                    set -eu
+    steps {
+        sh '''
+            set -eu
 
-                    python3 -m venv .venv
+            python3 -m venv .venv
 
-                    .venv/bin/pip install \
-                        -r app/requirements.txt \
-                        pytest
+            .venv/bin/python -m ensurepip --upgrade
 
-                    .venv/bin/python -m pytest -v
-                '''
-            }
-        }
+            .venv/bin/python -m pip install --upgrade pip
+
+            .venv/bin/python -m pip install -r app/requirements.txt pytest
+
+            .venv/bin/python -m pytest -v
+        '''
+    }
+}
 
         stage('Build Docker Image') {
             steps {
