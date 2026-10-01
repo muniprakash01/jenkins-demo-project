@@ -52,17 +52,17 @@ pipeline {
         }
 
         stage('Trivy Security Scan') {
-            steps {
-                sh '''
-                    set -eu
-
-                    trivy image \
-                        --severity HIGH,CRITICAL \
-                        --exit-code 1 \
-                        ${IMAGE_NAME}:${BUILD_NUMBER}
-                '''
-            }
-        }
+    steps {
+        sh '''
+            set -eu
+            trivy image \
+              --config /dev/null \
+              --severity HIGH,CRITICAL \
+              --exit-code 1 \
+              ${IMAGE_NAME}:${BUILD_NUMBER}
+        '''
+    }
+}
 
         stage('Deploy') {
             steps {
