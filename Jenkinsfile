@@ -14,11 +14,10 @@ pipeline {
     }
 
     stages {
-
         stage('Checkout') {
             steps {
                 checkout scm
-                echo 'GitHub checkout completed.'
+                echo 'GitHub checkout successful'
             }
         }
 
@@ -84,7 +83,7 @@ pipeline {
                     for i in $(seq 1 30); do
                         if curl -fsS \
                             http://localhost:${HOST_PORT}/; then
-                            echo "Application is healthy."
+                            echo "Application is healthy"
                             exit 0
                         fi
 
@@ -92,7 +91,7 @@ pipeline {
                         sleep 5
                     done
 
-                    echo "Application health check failed."
+                    echo "Health check failed"
                     exit 1
                 '''
             }
@@ -101,15 +100,16 @@ pipeline {
 
     post {
         success {
-            echo 'CI/CD pipeline completed successfully.'
+            echo 'CI/CD pipeline completed successfully'
         }
 
         failure {
-            echo 'Pipeline failed. Check the Console Output.'
+            echo 'Pipeline failed. Check the console output.'
         }
 
         always {
-            echo 'Pipeline execution finished.'
+            echo 'Pipeline execution finished'
         }
     }
 }
+
