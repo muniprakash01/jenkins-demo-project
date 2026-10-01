@@ -1,4 +1,3 @@
-```groovy
 pipeline {
     agent any
 
@@ -10,7 +9,6 @@ pipeline {
     environment {
         APP_NAME = 'jenkins-demo-project'
         IMAGE_NAME = 'jenkins-demo-project'
-        CONTAINER_PORT = '5000'
         HOST_PORT = '5000'
         COMPOSE_FILE = 'docker-compose.yml'
     }
@@ -20,7 +18,7 @@ pipeline {
         stage('Checkout') {
             steps {
                 checkout scm
-                echo 'Source code checked out successfully.'
+                echo 'GitHub checkout completed.'
             }
         }
 
@@ -29,14 +27,12 @@ pipeline {
                 sh '''
                     set -eu
 
-                    sudo apt-get update
-                    sudo apt-get install -y python3-venv python3-pip
-
-                    rm -rf .venv
                     python3 -m venv .venv
 
                     .venv/bin/python -m pip install --upgrade pip
-                    .venv/bin/python -m pip install -r app/requirements.txt pytest
+
+                    .venv/bin/python -m pip install \
+                        -r app/requirements.txt pytest
 
                     .venv/bin/python -m pytest -v
                 '''
@@ -47,8 +43,10 @@ pipeline {
             steps {
                 sh '''
                     set -eu
-                    docker build -t ${IMAGE_NAME}:${BUILD_NUMBER} .
-                    docker tag ${IMAGE_NAME}:${BUILD_NUMBER} ${IMAGE_NAME}:latest
+
+                    docker build \
+                        -t ${IMAGE_NAME}:${BUILD_NUMBER} \
+                        -t ${IMAGE_NAME}:latest .
                 '''
             }
         }
@@ -57,8 +55,10 @@ pipeline {
             steps {
                 sh '''
                     set -eu
-                    trivy image --exit-code 1 \
+
+                    trivy image \
                         --severity HIGH,CRITICAL \
+                        --exit-code 1 \
                         ${IMAGE_NAME}:${BUILD_NUMBER}
                 '''
             }
@@ -69,8 +69,9 @@ pipeline {
                 sh '''
                     set -eu
 
-                    docker compose -f ${COMPOSE_FILE} \
-                        up -d --build
+                    docker compose \
+                        -f ${COMPOSE_FILE} \
+                        up -d
                 '''
             }
         }
@@ -81,7 +82,8 @@ pipeline {
                     set -eu
 
                     for i in $(seq 1 30); do
-                        if curl -fsS http://localhost:${HOST_PORT}/; then
+                        if curl -fsS \
+                            http://localhost:${HOST_PORT}/; then
                             echo "Application is healthy."
                             exit 0
                         fi
@@ -90,7 +92,7 @@ pipeline {
                         sleep 5
                     done
 
-                    echo "Health check failed."
+                    echo "Application health check failed."
                     exit 1
                 '''
             }
@@ -103,11 +105,7 @@ pipeline {
         }
 
         failure {
-            echo 'Pipeline failed. Check the console output.'
-
-            sh '''
-                docker compose -f ${COMPOSE_FILE} ps || true
-            '''
+            echo 'Pipeline failed. Check the Console Output.'
         }
 
         always {
@@ -115,4 +113,3 @@ pipeline {
         }
     }
 }
-```
