@@ -69,20 +69,43 @@ pipeline {
             }
         }
 
+        stage('Deploy Application') {
+            steps {
+                sh '''
+                    docker compose up -d
+                '''
+            }
+        }
+
+        stage('Health Check') {
+            steps {
+                sh '''
+                    echo "Waiting for application to start..."
+                    sleep 10
+
+                    echo "Checking application health..."
+
+                    curl -f http://localhost:5000/health
+
+                    echo "Application health check passed successfully."
+                '''
+            }
+        }
+
         stage('Pipeline Completed') {
             steps {
-                echo 'All CI/CD testing stages completed successfully'
+                echo 'All CI/CD testing and health check stages completed successfully'
             }
         }
     }
 
     post {
         success {
-            echo 'CI/CD Pipeline SUCCESSFUL'
+            echo 'CI/CD PIPELINE SUCCESSFUL'
         }
 
         failure {
-            echo 'CI/CD Pipeline FAILED'
+            echo 'CI/CD PIPELINE FAILED'
         }
 
         always {
