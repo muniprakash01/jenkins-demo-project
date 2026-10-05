@@ -1,115 +1,167 @@
-
 pipeline {
     agent any
 
-    options {
-        timestamps()
-        disableConcurrentBuilds()
-    }
-
     environment {
-        APP_NAME = 'jenkins-demo-project'
         IMAGE_NAME = 'jenkins-demo-project'
-        HOST_PORT = '5000'
-        COMPOSE_FILE = 'docker-compose.yml'
+        IMAGE_TAG = "${BUILD_NUMBER}"
     }
 
     stages {
-        stage('Checkout') {
+
+        stage('Hello') {
             steps {
-                checkout scm
-                echo 'GitHub checkout successful'
+                echo 'Starting Jenkins CI/CD Pipeline'
             }
         }
 
-        stage('Install Dependencies and Test') {
+        stage('Git Checkout') {
             steps {
+                echo 'Checking out source code from GitHub'
+
+                git branch: 'main',
+                    url: 'https://github.com/muniprakash01/jenkins-demo-project.git'
+            }
+        }
+
+        stage('Check Python') {
+            steps {
+                echo 'Checking Python version'
+
                 sh '''
-                    set -eu
+                    python3 --version
+                '''
+            }
+        }
+
+        stage('Install Dependencies') {
+            steps {
+                echo 'Creating Python virtual environment'
+
+                sh '''
+                    rm -rf .venv
 
                     python3 -m venv .venv
 
                     .venv/bin/python -m pip install --upgrade pip
 
-                    .venv/bin/python -m pip install \
-                        -r app/requirements.txt pytest
+                    .venv/bin/python -m pip install -r app/requirements.txt
 
-                    .venv/bin/python -m pytest -v
+                    .venv/bin/python -m pip install pytest
                 '''
             }
         }
 
-        stage('Build Docker Image') {
+        stage('Application Test') {
             steps {
-                sh '''
-                    set -eu
+                echo 'Running application tests'
 
+                sh '''
+                    .venv/bin/python -m pytest tests/ -v
+                '''
+            }
+        }
+
+        stage('Docker Check') {
+            steps {
+                echo 'Checking Docker installation'
+
+                sh '''
+                    docker --version
+                '''
+            }
+        }
+
+        stage('Docker Build') {
+            steps {
+                echo 'Building Docker image'
+
+                sh '''
                     docker build \
-                        -t ${IMAGE_NAME}:${BUILD_NUMBER} \
+                        -t ${IMAGE_NAME}:${IMAGE_TAG} \
                         -t ${IMAGE_NAME}:latest .
                 '''
             }
         }
 
-        stage('Trivy Security Scan') {
-    steps {
-        sh '''
-            set -eu
-            trivy image \
-              --config /dev/null \
-              --severity HIGH,CRITICAL \
-              --exit-code 1 \
-              ${IMAGE_NAME}:${BUILD_NUMBER}
-        '''
-    }
-}
+        stage('Trivy Scan') {
+            steps {
+                echo 'Scanning Docker image with Trivy'
+
+                sh '''
+                    trivy image \
+                        --config /dev/null \
+                        --severity HIGH,CRITICAL \
+                        ${IMAGE_NAME}:${IMAGE_TAG}
+                '''
+            }
+        }
+
+        stage('Docker Compose Validation') {
+            steps {
+                echo 'Validating Docker Compose configuration'
+
+                sh '''
+                    docker compose config -q
+                '''
+            }
+        }
 
         stage('Deploy') {
             steps {
-                sh '''
-                    set -eu
+                echo 'Deploying application'
 
-                    docker compose \
-                        -f ${COMPOSE_FILE} \
-                        up -d
+                sh '''
+                    export IMAGE_TAG=${IMAGE_TAG}
+
+                    docker compose up -d
                 '''
             }
         }
 
         stage('Health Check') {
             steps {
+                echo 'Checking application health'
+
                 sh '''
-                    set -eu
+                    echo "Waiting for application..."
 
-                    for i in $(seq 1 30); do
-                        if curl -fsS \
-                            http://localhost:${HOST_PORT}/; then
-                            echo "Application is healthy"
-                            exit 0
-                        fi
+                    sleep 10
 
-                        echo "Waiting for application..."
-                        sleep 5
-                    done
+                    curl -f http://localhost:5000/health
 
-                    echo "Health check failed"
-                    exit 1
+                    echo "Application is healthy"
+                '''
+            }
+        }
+
+        stage('Cleanup') {
+            steps {
+                echo 'Cleaning unused Docker images'
+
+                sh '''
+                    docker image prune -f
                 '''
             }
         }
     }
 
     post {
+
         success {
-            echo 'CI/CD pipeline completed successfully'
+            echo '========================================'
+            echo 'CI/CD PIPELINE SUCCESSFUL'
+            echo '========================================'
         }
 
         failure {
-            echo 'Pipeline failed. Check the console output.'
+            echo '========================================'
+            echo 'CI/CD PIPELINE FAILED'
+            echo 'Check the Console Output'
+            echo '========================================'
         }
 
         always {
-            echo 'Pipeline execution finished'
+            echo 'Jenkins pipeline execution completed'
         }
     }
 }
